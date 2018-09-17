@@ -9,11 +9,13 @@ Jupyter Kernel for blender
 - make, reopen a jupyter notebook with IBPython kernel
 
 # TODO (just for myself)
-- Find a unused port for hermes socket
+- ~~Find a unused port for hermes socket~~
+- Large data transfer
+- write to built-in python console
 - Pass hermes port num to jupyter
 - Auto complete
 - Syntax highlight
 - pass matplotlib image
 - better UI in blender
 - Hypter non-block
-- jupyter magics including %pip
+- jupyter magics including %pip ~~%changehost~~

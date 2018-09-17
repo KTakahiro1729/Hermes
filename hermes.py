@@ -20,16 +20,36 @@ bl_info = {
     "category" : "Development",
 }
 
-def code_recv(code, has_changed, receptor_alive, response):
+def port_can_use(port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    result = False
+    try:
+        sock.bind(("localhost", port))
+        result = True
+    except OSError:
+        result = False
+    finally:
+        sock.close()
+        return result
+
+def make_socket(logger, port, sock_type):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    # find open port
+    sock.bind(("localhost", port))
+    port_info = "hermes {0} port at {1}".format(sock_type, port)
+    logger.debug(port_info)
+    return sock
+
+def code_recv(self, code, has_changed, receptor_alive, response, port):
     """recieve code and send back the results"""
     import logging
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger("code receptor")
-    logger.debug("start")
 
     # make socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("localhost", 8887))
+    sock = make_socket(logger, port, "code")
+    logger.debug("start hermes")
 
     # start recieveing
     while receptor_alive.value:
@@ -99,15 +119,13 @@ class CONSOLE_MT_code_receptor(bpy.types.Operator):
     _process = None
 
     _logger     = logging.getLogger("modal")
-    _out_logger = logging.getLogger("stdout")
-    _exc_logger = logging.getLogger("excption")
-    _evl_logger = logging.getLogger("last_expr")
 
     manager = Manager()
     code = manager.Value(c_char_p,"")
     response = manager.Value(c_char_p,"")
     has_changed = Value("i",0)
     receptor_alive = Value("i",1)
+    code_port = -1
 
 
     def modal(self, context, event):
@@ -134,10 +152,7 @@ class CONSOLE_MT_code_receptor(bpy.types.Operator):
                         "exc": exc
                     })
                 self.has_changed.value = 0
-                self._exc_logger.debug(exc)
-                self._out_logger.debug(out)
-                self._evl_logger.debug(evl)
-
+                print(out)
 
         return {'PASS_THROUGH'}
 
@@ -147,9 +162,20 @@ class CONSOLE_MT_code_receptor(bpy.types.Operator):
         self._timer = wm.event_timer_add(0.1, context.window)
         wm.modal_handler_add(self)
 
-        # run socket in subprocess
+        # find open port
+        for i in range(10):
+            self.code_port = i + 8890
+            if port_can_use(self.code_port):
+                self.report({"INFO"}, "hermes code port at {0}".format(self.code_port))
+                break
+            else:
+                self.report({"INFO"}, "port {0} was used".format(self.code_port))
+        else:
+            self.report({"ERROR"}, "failed to find open port")
+            return {'CANCELLED'}
+
         self._process = Process(target = code_recv,
-            args=(self.code, self.has_changed, self.receptor_alive, self.response))
+            args=(self, self.code, self.has_changed, self.receptor_alive, self.response, self.code_port))
         self._process.daemon = True
         self._process.start()
         return {'RUNNING_MODAL'}
