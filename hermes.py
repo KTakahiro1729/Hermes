@@ -90,7 +90,7 @@ def exec_code(code):
 
 class CONSOLE_MT_code_receptor(bpy.types.Operator):
     """Recieve python snippets from extern and execute them"""
-    bl_idname = "script.recieve_python_snippets"
+    bl_idname = "script.receive_python_snippets"
     bl_label = "start recieving python snippets"
     bl_description = "Recieve python snippets from Jupyter notebook and execute"
     bl_options = {"REGISTER", "UNDO"}
