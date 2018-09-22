@@ -1,7 +1,7 @@
 
 from ipykernel.kernelbase import Kernel
 import socket, json, logging, re, traceback, timeout_decorator
-
+import sys
 
 
 class IBpythonKernel(Kernel):
@@ -9,9 +9,18 @@ class IBpythonKernel(Kernel):
     implementation_version = '1.0'
     language = 'python'
     language_version = '3.5'
-    language_info = {'name': 'IBPython',
-                     'mimetype': 'text/plain',
-                     'extension': '.py'}
+    language_info = {
+        'name': 'python',
+        'version': "3.5",
+        'mimetype': 'text/x-python',
+        'codemirror_mode': {
+            'name': 'ipython',
+            'version': sys.version_info[0]
+        },
+        'pygments_lexer': 'ipython%d' % (3 if PY3 else 2),
+        'nbconvert_exporter': 'python',
+        'file_extension': '.py'
+    }
     banner = "Jupyter Kernel for Blender Python"
     hermes_host = "localhost"
     code_port = 8887
@@ -44,7 +53,7 @@ class IBpythonKernel(Kernel):
         except timeout_decorator.TimeoutError:
             content = {
                 "name": "stderr",
-                "text": "Could not access to hermes code socket({0}:{1})".format(self.hermes_host, self.code_port)
+                "text": "Could not access to hermes code socket( {0}:{1})".format(self.hermes_host, self.code_port)
             }
             self.send_response(self.iopub_socket,
                 'stream', content)

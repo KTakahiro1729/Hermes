@@ -6,6 +6,23 @@ from ctypes import c_char_p
 from contextlib import _RedirectStream, redirect_stdout, redirect_stderr
 from io import StringIO
 
+def sendall_sock(sock, target_sock, msg, csize = 1024):
+    if not msg.endswith(b"\0"):
+        msg += b"\0"
+    while msg:
+        send, left = msg[:csize],msg[csize:]
+        sock.sendto(send,target_sock)
+        msg = left
+
+def recvall(target):
+    received = b""
+    while True:
+        data, client = target.recvfrom(4096)
+        received += data
+        if received.endswith(b"\0"):
+            break
+    return received[:-1], client
+
 bl_info = {
     "name" : "Hermes -Jupyter for Blender-",
     "author" : "Allosteric",
@@ -32,14 +49,6 @@ def port_can_use(port):
         sock.close()
         return result
 
-def make_socket(logger, port, sock_type):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    # find open port
-    sock.bind(("localhost", port))
-    port_info = "hermes {0} port at {1}".format(sock_type, port)
-    logger.debug(port_info)
-    return sock
 
 def code_recv(self, code, has_changed, receptor_alive, response, port):
     """recieve code and send back the results"""
@@ -48,18 +57,19 @@ def code_recv(self, code, has_changed, receptor_alive, response, port):
     logger = logging.getLogger("code receptor")
 
     # make socket
-    sock = make_socket(logger, port, "code")
-    logger.debug("start hermes")
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.bind(("localhost", 8887))
+        logger.debug("start hermes")
 
-    # start recieveing
-    while receptor_alive.value:
-        data, client = sock.recvfrom(4096)
-        code.value = data.decode("utf-8")
-        has_changed.value = 1
-        logger.debug("got {0}".format(data))
-        while has_changed.value:
-            pass
-        sock.sendto(response.value.encode("utf-8"), client)
+        # start receiveing
+        while receptor_alive.value:
+            data, client = recvall(sock)
+            code.value = json.loads(data.decode("utf-8"))["code"]
+            has_changed.value = 1
+            logger.debug("got {0}".format(data))
+            while has_changed.value:
+                pass
+            sendall_sock(sock, client, response.value.encode("utf-8"))
 
     # terminate process
     sock.close()
@@ -89,9 +99,9 @@ def _convertExpr2Expression(Expr):
     result = ast.Expression(Expr.value, lineno=0, col_offset = 0)
     return result
 
-def exec_eval(code):
+
+def exec_eval(code_ast, fname = "<ast>"):
     """refined exec func with a returning value if the last is expression"""
-    code_ast = ast.parse(code)
 
     init_ast = copy.deepcopy(code_ast)
     init_ast.body = code_ast.body[:-1]
@@ -103,10 +113,21 @@ def exec_eval(code):
     if type(last_ast.body[0]) == ast.Expr:
         return eval(compile(_convertExpr2Expression(last_ast.body[0]), "<ast>", "eval"),globals())
     else:
-        exec(compile(last_ast, "<ast>", "exec"),globals())
+        exec(compile(last_ast, fname, "exec"),globals())
 
 def exec_code(code):
     return mount_stdioe(exec_eval, [], code)
+
+def dict2ast(dict_):
+    if type(dict_) == list:
+        return [dict2ast(d) for d in dict_]
+    if "term" in dict_.keys():
+        return dict_["term"]
+    ntype = getattr(ast,dict_.pop("ntype"))
+    d_fields = dict_.pop("fields")
+    n_fields = {fname: dict2ast(d) for fname, d in d_fields.items()}
+    node = ntype(**{**n_fields,**dict_})
+    return node
 
 class CONSOLE_MT_code_receptor(bpy.types.Operator):
     """Recieve python snippets from extern and execute them"""
@@ -138,7 +159,7 @@ class CONSOLE_MT_code_receptor(bpy.types.Operator):
 
         if event.type == 'TIMER':
             if self.has_changed.value:
-                evl, out, exc = exec_code(self.code.value)
+                evl, out, exc = exec_code(dict2ast(self.code.value))
                 try:
                     self.response.value = json.dumps({
                         "evl": evl,

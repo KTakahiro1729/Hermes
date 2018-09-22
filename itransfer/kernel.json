@@ -1,0 +1,8 @@
+{
+ "argv": ["python", "-m",
+          "itransfer", "-f",
+          "{connection_file}"],
+ "display_name": "ITransfer",
+ "name": "ITransfer",
+ "language": "python"
+}
