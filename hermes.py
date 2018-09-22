@@ -1,10 +1,10 @@
 import bpy
 
 import ast, copy, logging, traceback, json, socket
-from multiprocessing import Process, Value, Array, Manager
 from ctypes import c_char_p
 from contextlib import _RedirectStream, redirect_stdout, redirect_stderr
 from io import StringIO
+
 
 def sendall_sock(sock, target_sock, msg, csize = 1024):
     if not msg.endswith(b"\0"):
@@ -15,9 +15,11 @@ def sendall_sock(sock, target_sock, msg, csize = 1024):
         msg = left
 
 def recvall(target):
+    target.settimeout(0.01)
     received = b""
     while True:
         data, client = target.recvfrom(4096)
+        target.settimeout(None)
         received += data
         if received.endswith(b"\0"):
             break
@@ -49,27 +51,6 @@ def port_can_use(port):
         sock.close()
         return result
 
-
-def code_recv(self, code, has_changed, receptor_alive, response, port):
-    """recieve code and send back the results"""
-    import logging
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger("code receptor")
-
-    # make socket
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.bind(("localhost", 8887))
-        logger.debug("start hermes")
-
-        # start receiveing
-        while receptor_alive.value:
-            data, client = recvall(sock)
-            code.value = json.loads(data.decode("utf-8"))["code"]
-            has_changed.value = 1
-            logger.debug("got {0}".format(data))
-            while has_changed.value:
-                pass
-            sendall_sock(sock, client, response.value.encode("utf-8"))
 
     # terminate process
     sock.close()
@@ -119,6 +100,7 @@ def exec_code(code):
     return mount_stdioe(exec_eval, [], code)
 
 def dict2ast(dict_):
+
     if type(dict_) == list:
         return [dict2ast(d) for d in dict_]
     if "term" in dict_.keys():
@@ -137,43 +119,48 @@ class CONSOLE_MT_code_receptor(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     _timer = None
-    _process = None
-
+    # _process = None
+    _sock = None
     _logger     = logging.getLogger("modal")
 
-    manager = Manager()
-    code = manager.Value(c_char_p,"")
-    response = manager.Value(c_char_p,"")
-    has_changed = Value("i",0)
-    receptor_alive = Value("i",1)
+    code = ""
+    response = ""
     code_port = -1
+    def code_recv(self):
+        """recieve code and send back the results"""
 
+        # start receiveing
+        try:
+            data, client = recvall(self._sock)
+        except socket.timeout:
+            return
+        self.code = json.loads(data.decode("utf-8"))["code"]
+        # self.report({"INFO"}, "got {0}".format(data))
+        evl, out, exc = exec_code(dict2ast(self.code))
+        try:
+            self.response = json.dumps({
+                "evl": evl,
+                "out": out,
+                "exc": exc
+            })
+        except TypeError:
+            self.response = json.dumps({
+                "evl": str(evl),
+                "out": out,
+                "exc": exc
+            })
+        print(out)
+        sendall_sock(self._sock, client, self.response.encode("utf-8"))
 
     def modal(self, context, event):
         if event.type in {'ESC'}:
-            self.receptor_alive.value = 0
-            self._process.terminate()
-            self._logger.debug("end")
+            self._sock.close()
+            self.report({"INFO"}, "end hermers")
             self.cancel(context)
             return {'FINISHED'}
 
         if event.type == 'TIMER':
-            if self.has_changed.value:
-                evl, out, exc = exec_code(dict2ast(self.code.value))
-                try:
-                    self.response.value = json.dumps({
-                        "evl": evl,
-                        "out": out,
-                        "exc": exc
-                    })
-                except TypeError:
-                    self.response.value = json.dumps({
-                        "evl": str(evl),
-                        "out": out,
-                        "exc": exc
-                    })
-                self.has_changed.value = 0
-                print(out)
+            self.code_recv()
 
         return {'PASS_THROUGH'}
 
@@ -195,10 +182,9 @@ class CONSOLE_MT_code_receptor(bpy.types.Operator):
             self.report({"ERROR"}, "failed to find open port")
             return {'CANCELLED'}
 
-        self._process = Process(target = code_recv,
-            args=(self, self.code, self.has_changed, self.receptor_alive, self.response, self.code_port))
-        self._process.daemon = True
-        self._process.start()
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._sock.bind(("localhost", self.code_port))
+        logging.debug("start hermes")
         return {'RUNNING_MODAL'}
 
     def cancel(self, context):

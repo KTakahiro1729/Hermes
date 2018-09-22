@@ -1,4 +1,4 @@
-from IPython.core.interactiveshell import InteractiveShellABC, ExecutionInfo, ExecutionResult
+from IPython.core.interactiveshell import InteractiveShellABC
 from IPython.core.magic import magics_class, line_magic, Magics
 from ipykernel.zmqshell import ZMQInteractiveShell, KernelMagics
 from ipykernel.ipkernel import IPythonKernel
@@ -121,7 +121,7 @@ class TransferKernelMagics(KernelMagics):
 class TransferInteractiveShell(ZMQInteractiveShell):
     banner = "transfers code to a different server"
     target_host = "localhost"
-    code_port = 8887
+    code_port = 8890
     socket_timeout = 0.5
 
     @_doc_copy(ZMQInteractiveShell.run_ast_nodes)

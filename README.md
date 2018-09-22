@@ -19,4 +19,4 @@ Jupyter Kernel for blender
 - pass matplotlib image
 - better UI in blender
 - Hypter non-block
-- jupyter magics including %pip ~~%changehost~~
+- jupyter magics including %pip ~~%changehost~~ <- not working now
