@@ -1,8 +1,0 @@
-{
- "argv": ["python", "-m",
-          "ibpython", "-f",
-          "{connection_file}"],
- "display_name": "IBPython",
- "name": "IBPython",
- "language": "python"
-}
