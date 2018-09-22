@@ -6,7 +6,7 @@ Jupyter Kernel for blender
 - install hermes.py as an addon of blender
 - `start receiving python snippets` at python console -> Console
 - start jupyter notebook
-- make, reopen a jupyter notebook with ITranfer kernel
+- make, reopen a jupyter notebook with ITransfer kernel
 
 # TODO (just for myself)
 - ~~Find a unused port for hermes socket~~
